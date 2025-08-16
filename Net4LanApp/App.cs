@@ -10,6 +10,8 @@ namespace Client;
 
 class Program {
     static async Task Main(string[] args) {
+        Logger.Configure();
+
         // Simulate running app with graceful exit on Ctrl+C
         Console.CancelKeyPress += (s, e) => {
             Environment.Exit(0);
