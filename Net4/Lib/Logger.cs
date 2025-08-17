@@ -35,7 +35,12 @@ public static class Logger {
         _factory = LoggerFactory.Create(builder => {
             builder.ClearProviders();
             builder.AddConsole();
-            builder.AddProvider(new FileLoggerProvider(_config));
+            #if DEBUG // Debug | Release
+
+            #else
+                builder.AddProvider(new FileLoggerProvider(_config));
+            #endif
+
         });
     }
 

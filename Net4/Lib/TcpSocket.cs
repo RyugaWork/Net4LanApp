@@ -49,7 +49,7 @@ public class Packet {
     public static Packet? Deserialize(string json) {
         using var doc = JsonDocument.Parse(json);
 
-        if (!doc.RootElement.TryGetProperty("type", out var typeProp))
+        if (!doc.RootElement.TryGetProperty("Type", out var typeProp))
             return null;
 
         string? type = typeProp.GetString();
@@ -67,18 +67,9 @@ public class Tcp_Mess_Pck : Packet {
     public Tcp_Mess_Pck() : base("Message") { }
 }
 
-public class TcpSocket : IDisposable {
-    private TcpClient? Tcpsocket { get; set; } = null;
+public class TcpSocket(TcpClient socket) : IDisposable {
+    public readonly TcpClient Tcpsocket = socket;
     private NetworkStream? Tcpstream { get; set; } = null;
-
-    /// <summary>
-    /// Constructor that initializes with an existing TcpClient.
-    /// </summary>
-    public TcpSocket(TcpClient socket) {
-        InitNetworkStream();
-
-        this.Tcpsocket = socket;
-    }
 
     public bool IsConnected => this.Tcpsocket!.Connected; // Checks if the TCP socket is connected.
 
@@ -101,6 +92,7 @@ public class TcpSocket : IDisposable {
             _writer = new StreamWriter(Tcpstream!, utf8NoBom) { AutoFlush = true };
         }
         catch (Exception ex) {
+            Logger.Logger.Error($"NetworkStream unexpected error: {ex}");
             throw new Exception($"NetworkStream unexpected error: {ex}");
         }
     }
@@ -128,6 +120,7 @@ public class TcpSocket : IDisposable {
         var data = Encoding.UTF8.GetBytes(packet);
 
         try {
+            Logger.Logger.Info($"Await send {packet}");
             await Tcpstream.WriteAsync(data);
             await Tcpstream.FlushAsync();
         }
@@ -196,7 +189,6 @@ public class TcpSocket : IDisposable {
 
                 Tcpsocket.Close();
                 Tcpsocket.Dispose();
-                Tcpsocket = null;
             }
 
             _reader?.Dispose();
