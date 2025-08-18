@@ -37,10 +37,10 @@ public class TcpPingConfig() {
 
 public class Packet {
     // Type of the packet 
-    public string? Type { get; set; } = null; // Packet type (e.g., "Connect", "Ping", "Message").
+    public string Type { get; set; } = ""; // Packet type (e.g., "Connect", "Ping", "Message").
     public DateTime Timestamp { get; set; } = DateTime.Now; // Timestamp indicating when packet was created.
 
-    public Packet(string? type) => this.Type = type;
+    public Packet(string type) => this.Type = type;
 
     // Serializes the current object to a JSON string using its runtime type.
     public string Serialize() => JsonSerializer.Serialize(this, GetType());

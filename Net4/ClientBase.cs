@@ -14,7 +14,8 @@ public abstract class ClientBase(TcpClient socket) {
     private Task? _timeoutworkerTask;
     private readonly PacketDispatcher _dispatcher = new();
 
-    public void RegisterHandler(string type, Func<Packet, Task> handler) => _dispatcher.RegisterHandler(type, handler);
+    public void RegisterHandler(string type, Func<Packet, Task> handler, int priority = 0) 
+        => _dispatcher.RegisterHandler(type, handler, priority);
     public void UpdateLastPing() => _socket.UpdateLastPing();
 
     private void Init() {
@@ -32,6 +33,9 @@ public abstract class ClientBase(TcpClient socket) {
         _timeoutworkerTask = Task.Run(() => TimeOutCheckAsync());
     }
 
+    public async Task SendAsync(Packet packet) {
+        await _socket.SendAsync(packet);
+    }
     public abstract void OnInit();
     public abstract Task OnConnect();
 
@@ -50,7 +54,7 @@ public abstract class ClientBase(TcpClient socket) {
 
         await OnConnect();
 
-        Logger.Logger.Info($"Client connect to {host}:{port}","Client");
+        Logger.Logger.Info($"Client connected to {host}:{port}","Client");
 
         _handshakeworkerTask = Task.Run(() => HandshakeAsync());
         _timeoutworkerTask = Task.Run(() => TimeOutCheckAsync());
@@ -97,9 +101,18 @@ public abstract class ClientBase(TcpClient socket) {
 
 public class Client(TcpClient socket) : ClientBase(socket) {
 
-    public override async Task OnConnect() { await Task.Delay(1000); }
+    //public override async Task OnConnect() { await Task.Delay(1000); }
+    public override async Task OnConnect() { 
+        for(int i=0;i<10;i++) {
+            await SendAsync(new Tcp_Mess_Pck() { Sender = "", Text = ""});
+            await SendAsync(new Packet("Ping"));
+            await Task.Delay(1);
+        }
+    }
+
     public override void OnInit() {
-        RegisterHandler("Ping", OnPing);
+        RegisterHandler("Ping", OnPing, 10);
+        RegisterHandler("Message", OnPing, 0);
     }
 
     private async Task OnPing(Packet packet) => UpdateLastPing();
