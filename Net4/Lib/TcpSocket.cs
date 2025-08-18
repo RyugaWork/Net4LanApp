@@ -25,7 +25,7 @@ public static class Network {
                 return ip.ToString();
             }
         }
-        Logger.Logger.Warn("No network adapters with an IPv4 address found.");
+        Logger.Logger.Warn().Log("No network adapters with an IPv4 address found.");
         throw new Exception("No network adapters with an IPv4 address found.");
     }
 }
@@ -92,7 +92,7 @@ public class TcpSocket(TcpClient socket) : IDisposable {
             _writer = new StreamWriter(Tcpstream!, utf8NoBom) { AutoFlush = true };
         }
         catch (Exception ex) {
-            Logger.Logger.Error($"NetworkStream unexpected error: {ex}");
+            Logger.Logger.Error().Log($"NetworkStream unexpected error: {ex}");
             throw new Exception($"NetworkStream unexpected error: {ex}");
         }
     }
@@ -109,67 +109,68 @@ public class TcpSocket(TcpClient socket) : IDisposable {
     /// <summary>
     /// Recive, Sent packet asynchronously over the TCP stream.
     /// </summary>
-    public async Task SendAsync(Packet pck) {
+    public async Task SendAsync(Packet packet) {
         if (Tcpstream == null) {
-            Logger.Logger.Warn("NetworkStream is not initiated");
+            Logger.Logger.Warn().Log("NetworkStream is not initiated");
             throw new Exception("NetworkStream is not initiated");
         }
             
 
-        var packet = pck.Serialize() + "\n";
-        var data = Encoding.UTF8.GetBytes(packet);
+        var Serpacket = packet.Serialize() + "\n";
+        var data = Encoding.UTF8.GetBytes(Serpacket);
 
         try {
-            Logger.Logger.Info($"Await send [{packet}]","Send");
+            Logger.Logger.Info().Cid("Send").Log($"{packet}");
             await Tcpstream.WriteAsync(data);
             await Tcpstream.FlushAsync();
         }
         catch (IOException ioEx) { // Signal disconnect
             // This happens when the connection is closed/reset
             Disconnect();
-            Logger.Logger.Warn($"NetworkStream connection closed: {ioEx}");
+            Logger.Logger.Warn().Log($"NetworkStream connection closed: {ioEx}");
             throw new Exception($"NetworkStream connection closed: {ioEx}");
         }
         catch (SocketException sockEx) { // Signal disconnect
             Disconnect();
-            Logger.Logger.Error($"NetworkStream socket error: {sockEx}");
+            Logger.Logger.Error().Log($"NetworkStream socket error: {sockEx}");
             throw new Exception($"NetworkStream socket error: {sockEx}");
         }
         catch (Exception ex) {
-            Logger.Logger.Error($"NetworkStream unexpected error: {ex}");
+            Logger.Logger.Error().Log($"NetworkStream unexpected error: {ex}");
             throw new Exception($"NetworkStream unexpected error: {ex}");
         }
     }
 
     public async Task<Packet?> RecvAsync() {
         if (Tcpstream == null) {
-            Logger.Logger.Warn("NetworkStream is not initiated");
+            Logger.Logger.Warn().Log("NetworkStream is not initiated");
             throw new Exception("NetworkStream is not initiated");
         }
             
         try {
             using var reader = new StreamReader(Tcpstream, Encoding.UTF8, leaveOpen: true);
-            var line = await reader.ReadLineAsync();
+            var data = await reader.ReadLineAsync();
 
-            if (string.IsNullOrWhiteSpace(line))
+            if (string.IsNullOrWhiteSpace(data))
                 return null;
 
-            Logger.Logger.Info($"Recv packet [{line}]","Recv");
-            return Packet.Deserialize(line);
+            var packet = Packet.Deserialize(data);
+            Logger.Logger.Info().Cid("Recv").Log($"{packet}");
+            return packet;
         }
         catch (IOException ioEx) { // Signal disconnect
             // This happens when the connection is closed/reset
             Disconnect();
-            Logger.Logger.Warn($"NetworkStream connection closed: {ioEx}");
+            Logger.Logger.Warn().Log($"NetworkStream connection closed: {ioEx}");
             throw new Exception($"NetworkStream connection closed: {ioEx}");
         }
         catch (SocketException sockEx) { // Signal disconnect
             Disconnect();
-            Logger.Logger.Error($"NetworkStream socket error: {sockEx}");
+            Logger.Logger.Error().Log($"NetworkStream socket error: {sockEx}");
             throw new Exception($"NetworkStream socket error: {sockEx}");
         }
         catch (Exception ex) {
-            Logger.Logger.Error($"NetworkStream unexpected error: {ex}");
+            Logger.Logger.Error().Log($"NetworkStream unexpected error: {ex}");
             throw new Exception($"NetworkStream unexpected error: {ex}");
         }
     }
@@ -186,7 +187,7 @@ public class TcpSocket(TcpClient socket) : IDisposable {
                     }
                     catch (Exception ex) {
                         /* ignore shutdown errors */
-                        Logger.Logger.Warn($"Shutdown unexpected error: {ex}");
+                        Logger.Logger.Warn().Log($"Shutdown unexpected error: {ex}");
                     }
                 }
 
@@ -202,11 +203,11 @@ public class TcpSocket(TcpClient socket) : IDisposable {
             Tcpstream = null;
         }
         catch (Exception ex) {
-            Logger.Logger.Error($"Disconnect unexpected error: {ex}");
+            Logger.Logger.Error().Log($"Disconnect unexpected error: {ex}");
             throw new Exception($"Disconnect unexpected error: {ex}");
         }
 
-        Logger.Logger.Info($"Disconnected", "TcpSocket");
+        Logger.Logger.Info().Cid("TcpSocket").Log($"Disconnected");
     }
 
     private bool disposed = false; // to detect redundant calls

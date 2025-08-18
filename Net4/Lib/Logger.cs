@@ -2,7 +2,9 @@
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 
 #pragma warning disable IDE0130
 namespace Net4.Logger;
@@ -18,36 +20,59 @@ public class LoggerConfig {
 #else
     public readonly string Mode = "Release"; 
 #endif
-    public string CustomFormat { get; set; } = "[{Mode}][{Timestamp}] [{Level}] ({CorrelationId}): {Message}";
-    public string TimeFormat { get; set; } = "HH:mm:ss.ffff";
+    public string CustomFormat { get; set; } = "[{Mode}][{Timestamp}]\n[{Level}][{Tickstamp}]: ({CorrelationId}) {Message}";
+    public string TimeFormat { get; set; } = "HH:mm:ss";
+    public string TickFormat{ get; set; } = "ffff";
+
 }
 
-/// <summary>
-/// Static Logger wrapper using Microsoft.Extensions.Logging
-/// </summary>
-public static class Logger {
-    private static ILoggerFactory? _factory;
-    private static LoggerConfig _config = new();
+public class LoggerFilter {
+    // Correlation ID whitelist
+    public HashSet<string> AllowedCorrelationIds { get; set; } = new();
 
-    public static void Configure(LoggerConfig? config = null) {
-        _config = config ?? new LoggerConfig();
+    // Explicit level filter (if empty => allow all levels above MinimumLevel)
+    public HashSet<LogLevel> AllowedLevels { get; set; } = new();
+}
 
-        _factory = LoggerFactory.Create(builder => {
-            builder.ClearProviders();
-            builder.AddConsole();
-            #if DEBUG // Debug | Release
+public readonly struct LoggerBuilder(LogLevel level, string? cid = null, LoggerConfig? config = null, LoggerFilter? filter = null) {
+    private readonly LogLevel _level = level;
+    private readonly string? _cid = cid;
+    private readonly LoggerConfig? _config = config ?? new();
+    private readonly LoggerFilter? _filter = filter ?? new();
+    private readonly ILoggerFactory _factory = LoggerFactory.Create(builder => {
+        builder.ClearProviders();
+        builder.AddConsole();
+#if DEBUG // Debug | Release
 
-            #else
+#else
                 builder.AddProvider(new FileLoggerProvider(_config));
-            #endif
+#endif
 
-        });
+    });
+
+    private string FormatMessage(LogLevel level, string message, string? correlationId) {
+        if (level == LogLevel.Trace || level == LogLevel.Debug) {
+            message = $"[{message}]"; // highlight noisy logs
+        }
+
+        var placeholders = new Dictionary<string, string?> {
+            ["{Mode}"] = _config!.Mode,
+            ["{Timestamp}"] = DateTime.UtcNow.ToString(_config!.TimeFormat),
+            ["{Tickstamp}"] = DateTime.UtcNow.ToString(_config!.TickFormat),
+            ["{Level}"] = level.ToString(),
+            ["{CorrelationId}"] = correlationId ?? Guid.NewGuid().ToString("N")[..6],
+            ["{Message}"] = message
+        };
+
+        var output = _config.CustomFormat;
+        foreach (var kv in placeholders) {
+            output = output.Replace(kv.Key, kv.Value);
+        }
+
+        return output;
     }
 
-    private static ILogger GetLogger() {
-        if (_factory == null)
-            throw new InvalidOperationException("Logger not configured. Call Logger.Configure() first.");
-
+    private ILogger GetLogger() {
         // Walk stack to find the *caller of Logger.Info/Warn/Error/Debug*
         var stack = new StackTrace();
         var frame = stack.GetFrame(2); // 0 = GetLogger, 1 = Info(), 2 = real caller
@@ -55,31 +80,44 @@ public static class Logger {
         var type = method?.DeclaringType?.Name ?? "UnknownClass";
         var methodName = method?.Name ?? "UnknownMethod";
 
-        var category = $"{type}.{methodName}";
+        var category = $"{Regex.Replace(type, @"<([^>]+)>.*", "$1")}.{methodName}";
         return _factory.CreateLogger(category);
     }
 
-    private static string FormatMessage(LogLevel level, string message, string? correlationId) {
-        var timestamp = DateTime.UtcNow.ToString(_config.TimeFormat);
-        return _config.CustomFormat
-            .Replace("{Mode}", _config.Mode)
-            .Replace("{Timestamp}", timestamp)
-            .Replace("{Level}", level.ToString())
-            .Replace("{CorrelationId}", correlationId ?? Guid.NewGuid().ToString("N")[..6])
-            .Replace("{Message}", message);
+    public LoggerBuilder Cid(string? cid) => new LoggerBuilder(_level,cid,_config,_filter);
+    public LoggerBuilder Config(LoggerConfig? config) => new LoggerBuilder(_level,_cid,config,_filter);
+    public LoggerBuilder Fillter(LoggerFilter? filter) => new LoggerBuilder(_level,_cid,_config,filter);
+
+    public void Log(string message) {
+        // filter by allowed levels
+        if (_filter!.AllowedLevels.Count > 0 && !_filter.AllowedLevels.Contains(_level))
+            return;
+
+        // filter by correlationId
+        if (_filter.AllowedCorrelationIds.Count > 0 &&
+            (_cid == null || !_filter.AllowedCorrelationIds.Contains(_cid)))
+            return;
+
+        GetLogger().LogInformation(FormatMessage(_level, message, _cid));
     }
 
-    public static void Info(string message, string? correlationId = null) =>
-        GetLogger().LogInformation(FormatMessage(LogLevel.Information, message, correlationId));
+}
 
-    public static void Warn(string message, string? correlationId = null) =>
-        GetLogger().LogWarning(FormatMessage(LogLevel.Warning, message, correlationId));
+/// <summary>
+/// Static Logger wrapper using Microsoft.Extensions.Logging
+/// </summary>
+public static class Logger {
 
-    public static void Error(string message, string? correlationId = null) =>
-        GetLogger().LogError(FormatMessage(LogLevel.Error, message, correlationId));
+    private static readonly LoggerFilter? _fillter = new LoggerFilter {
+        //AllowedCorrelationIds = new HashSet<string> { "Recv" }
+    };
 
-    public static void Debug(string message, string? correlationId = null) =>
-        GetLogger().LogDebug(FormatMessage(LogLevel.Debug, message, correlationId));
+    public static LoggerBuilder Trace() => new LoggerBuilder(LogLevel.Trace).Fillter(_fillter);
+    public static LoggerBuilder Critical() => new LoggerBuilder(LogLevel.Critical).Fillter(_fillter);
+    public static LoggerBuilder Info() => new LoggerBuilder(LogLevel.Information).Fillter(_fillter);
+    public static LoggerBuilder Warn() => new LoggerBuilder(LogLevel.Warning).Fillter(_fillter);
+    public static LoggerBuilder Error() => new LoggerBuilder(LogLevel.Error).Fillter(_fillter);
+    public static LoggerBuilder Debug() => new LoggerBuilder(LogLevel.Debug).Fillter(_fillter);
 }
 
 public class FileLoggerProvider : ILoggerProvider {

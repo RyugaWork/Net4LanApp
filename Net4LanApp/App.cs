@@ -11,8 +11,6 @@ namespace ClientApp;
 
 class Program {
     static async Task Main(string[] args) {
-        Logger.Configure();
-
         var client = new Client(new TcpClient());
 
         await client.ConnectAsync(Network.LocalIPAddress, 5000);
@@ -22,7 +20,7 @@ class Program {
             Environment.Exit(0);
         };
         while (true) {
-            Logger.Info("Client is running - Ctr + C to exit");
+            Logger.Info().Log("Client is running - Ctr + C to exit");
             await Task.Delay(60000);
         }
     }

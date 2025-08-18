@@ -26,7 +26,7 @@ public abstract class ClientBase(TcpClient socket) {
     }
 
     public void Connect() {
-        Logger.Logger.Info($"Client connected!", "Server");
+        Logger.Logger.Info().Cid("Server").Log($"Client connected!");
         Init();
 
         _handshakeworkerTask = Task.Run(() => HandshakeAsync());
@@ -48,13 +48,13 @@ public abstract class ClientBase(TcpClient socket) {
             Init();
         }
         catch (Exception ex) {
-            Logger.Logger.Error($"Connection unexpected error: {ex}");
+            Logger.Logger.Error().Log($"Connection unexpected error: {ex}");
             throw new Exception($"Connection unexpected error: {ex}");
         }   
 
         await OnConnect();
 
-        Logger.Logger.Info($"Client connected to {host}:{port}","Client");
+        Logger.Logger.Info().Cid("Client").Log($"Client connected to {host}:{port}");
 
         _handshakeworkerTask = Task.Run(() => HandshakeAsync());
         _timeoutworkerTask = Task.Run(() => TimeOutCheckAsync());
@@ -88,7 +88,7 @@ public abstract class ClientBase(TcpClient socket) {
             _socket?.Disconnect();
         }
         catch (Exception ex) {
-            Logger.Logger.Error($"Disconnect unexpected error: {ex}");
+            Logger.Logger.Error().Log($"Disconnect unexpected error: {ex}");
             throw new Exception($"Disconnect unexpected error: {ex}");
         }
 

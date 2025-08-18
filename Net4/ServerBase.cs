@@ -23,7 +23,7 @@ public class ServerBase(int port) {
     private void Listener() {
         Tcplistener!.Start();
 
-        Logger.Logger.Info($"Server started listen on {Network.LocalIPAddress}:{ListeningPort}","Listener");
+        Logger.Logger.Info().Cid("Listener").Log($"Server started listen on {Network.LocalIPAddress}:{ListeningPort}");
 
         while (!_cts.Token.IsCancellationRequested && Tcplistener != null) {
             var socket = Tcplistener!.AcceptTcpClient();

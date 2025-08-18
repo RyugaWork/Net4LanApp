@@ -10,7 +10,6 @@ namespace ServerApp;
 
 class Program {
     static async Task Main(string[] args) {
-        Logger.Configure();
 
         var server = new Server(5000);
         server.Start();
@@ -20,7 +19,7 @@ class Program {
             Environment.Exit(0);
         };
         while (true) {
-            Logger.Info("Server is running - Ctr + C to exit");
+            Logger.Info().Log("Server is running - Ctr + C to exit");
             await Task.Delay(60000);
         }
     }
