@@ -1,5 +1,4 @@
-﻿using Net4.Tcp;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Sockets;
@@ -13,19 +12,31 @@ public abstract class ClientBase(TcpClient socket) {
     private readonly CancellationTokenSource _cts = new CancellationTokenSource();
     private Task? _handshakeworkerTask;
     private Task? _timeoutworkerTask;
+    private readonly PacketDispatcher _dispatcher = new();
 
-    public void Init() {
+    public void RegisterHandler(string type, Func<Packet, Task> handler, int priority = 0) 
+        => _dispatcher.RegisterHandler(type, handler, priority);
+    public void UpdateLastPing() => _socket.UpdateLastPing();
+
+    private void Init() {
         _socket.InitNetworkStream();
+        _dispatcher.Init();
+
+        OnInit();
     }
 
     public void Connect() {
         Logger.Logger.Info($"Client connected!", "Server");
-        _socket.InitNetworkStream();
+        Init();
 
         _handshakeworkerTask = Task.Run(() => HandshakeAsync());
         _timeoutworkerTask = Task.Run(() => TimeOutCheckAsync());
     }
 
+    public async Task SendAsync(Packet packet) {
+        await _socket.SendAsync(packet);
+    }
+    public abstract void OnInit();
     public abstract Task OnConnect();
 
     public async Task ConnectAsync(string host, int port) {
@@ -34,7 +45,7 @@ public abstract class ClientBase(TcpClient socket) {
 
         try { 
             _socket!.Tcpsocket!.Connect(host, port);
-            _socket.InitNetworkStream();
+            Init();
         }
         catch (Exception ex) {
             Logger.Logger.Error($"Connection unexpected error: {ex}");
@@ -43,7 +54,7 @@ public abstract class ClientBase(TcpClient socket) {
 
         await OnConnect();
 
-        Logger.Logger.Info($"Client connect to {host}:{port}","Client");
+        Logger.Logger.Info($"Client connected to {host}:{port}","Client");
 
         _handshakeworkerTask = Task.Run(() => HandshakeAsync());
         _timeoutworkerTask = Task.Run(() => TimeOutCheckAsync());
@@ -65,22 +76,14 @@ public abstract class ClientBase(TcpClient socket) {
             var packet = await _socket.RecvAsync();
 
             if (packet != null) {
-                Logger.Logger.Info($"Recv >> {packet.Serialize()}");
-                switch (packet.Type) {
-                    case "Ping": {
-                        _socket!.UpdateLastPing();
-                        break;
-                    }
-
-                    default:
-                        break;
-                }
+                _dispatcher.Enqueue(packet);
             }
         }
     }
 
     public void Disconnect() {
         _cts.Cancel();
+        _dispatcher.Stop();
         try {
             _socket?.Disconnect();
         }
@@ -98,5 +101,19 @@ public abstract class ClientBase(TcpClient socket) {
 
 public class Client(TcpClient socket) : ClientBase(socket) {
 
-    public override async Task OnConnect() { await Task.Delay(1000); }
+    //public override async Task OnConnect() { await Task.Delay(1000); }
+    public override async Task OnConnect() { 
+        for(int i=0;i<10;i++) {
+            await SendAsync(new Tcp_Mess_Pck() { Sender = "", Text = ""});
+            await SendAsync(new Packet("Ping"));
+            await Task.Delay(1);
+        }
+    }
+
+    public override void OnInit() {
+        RegisterHandler("Ping", OnPing, 10);
+        RegisterHandler("Message", OnPing, 0);
+    }
+
+    private async Task OnPing(Packet packet) => UpdateLastPing();
 }

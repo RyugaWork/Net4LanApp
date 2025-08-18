@@ -9,7 +9,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 
 #pragma warning disable IDE0130
-namespace Net4.Tcp;
+namespace Net4;
 #pragma warning restore IDE0130
 
 public static class Network {
@@ -37,10 +37,10 @@ public class TcpPingConfig() {
 
 public class Packet {
     // Type of the packet 
-    public string? Type { get; set; } = null; // Packet type (e.g., "Connect", "Ping", "Message").
+    public string Type { get; set; } = ""; // Packet type (e.g., "Connect", "Ping", "Message").
     public DateTime Timestamp { get; set; } = DateTime.Now; // Timestamp indicating when packet was created.
 
-    public Packet(string? type) => this.Type = type;
+    public Packet(string type) => this.Type = type;
 
     // Serializes the current object to a JSON string using its runtime type.
     public string Serialize() => JsonSerializer.Serialize(this, GetType());
@@ -120,7 +120,7 @@ public class TcpSocket(TcpClient socket) : IDisposable {
         var data = Encoding.UTF8.GetBytes(packet);
 
         try {
-            Logger.Logger.Info($"Await send {packet}");
+            Logger.Logger.Info($"Await send [{packet}]","Send");
             await Tcpstream.WriteAsync(data);
             await Tcpstream.FlushAsync();
         }
@@ -142,9 +142,11 @@ public class TcpSocket(TcpClient socket) : IDisposable {
     }
 
     public async Task<Packet?> RecvAsync() {
-        if (Tcpstream == null)
+        if (Tcpstream == null) {
+            Logger.Logger.Warn("NetworkStream is not initiated");
             throw new Exception("NetworkStream is not initiated");
-
+        }
+            
         try {
             using var reader = new StreamReader(Tcpstream, Encoding.UTF8, leaveOpen: true);
             var line = await reader.ReadLineAsync();
@@ -152,6 +154,7 @@ public class TcpSocket(TcpClient socket) : IDisposable {
             if (string.IsNullOrWhiteSpace(line))
                 return null;
 
+            Logger.Logger.Info($"Recv packet [{line}]","Recv");
             return Packet.Deserialize(line);
         }
         catch (IOException ioEx) { // Signal disconnect
@@ -203,7 +206,7 @@ public class TcpSocket(TcpClient socket) : IDisposable {
             throw new Exception($"Disconnect unexpected error: {ex}");
         }
 
-        Logger.Logger.Info($"Disconnected", "TCPSOCKET");
+        Logger.Logger.Info($"Disconnected", "TcpSocket");
     }
 
     private bool disposed = false; // to detect redundant calls

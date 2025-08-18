@@ -1,6 +1,5 @@
 ﻿using Net4.Logger;
 using Net4;
-using Net4.Tcp;
 using System;
 using System.Net.Sockets;
 using System.Threading.Tasks;

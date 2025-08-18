@@ -19,7 +19,7 @@ public class LoggerConfig {
     public readonly string Mode = "Release"; 
 #endif
     public string CustomFormat { get; set; } = "[{Mode}][{Timestamp}] [{Level}] ({CorrelationId}): {Message}";
-    public string TimeFormat { get; set; } = "yyyy-MM-dd HH:mm:ss";
+    public string TimeFormat { get; set; } = "HH:mm:ss.ffff";
 }
 
 /// <summary>
