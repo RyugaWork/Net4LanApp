@@ -1,9 +1,11 @@
 ﻿using System.Net.Sockets;
+using System.Runtime.Intrinsics.Arm;
 
 namespace Net4;
 
 public abstract class ClientBase(TcpClient socket, PacketDispatcher dispatcher) : IAsyncDisposable {
-    private readonly TcpSocket _socket = new TcpSocket(socket);
+    private readonly TcpSocket _tcpsocket = new TcpSocket(socket);
+    private readonly UdpSocket _udpsocket = new UdpSocket(0);
     private readonly CancellationTokenSource _cts = new CancellationTokenSource();
     private Task? _handshakeworkerTask;
     private Task? _timeoutworkerTask;
@@ -13,7 +15,7 @@ public abstract class ClientBase(TcpClient socket, PacketDispatcher dispatcher) 
     // Public API
     // ========================================
 
-    public void UpdateLastPing() => _socket.UpdateLastPing();
+    public void UpdateLastPing() => _tcpsocket.UpdateLastPing();
 
     // Called once during initialization after network stream setup.
     // Override to register handlers.
@@ -28,12 +30,45 @@ public abstract class ClientBase(TcpClient socket, PacketDispatcher dispatcher) 
         StartBackgroundWorkers();
     }
 
+    public async Task ConnectAsync() {
+        var localIp = UdpSocket.GetLocalLanAddress();
+        Logger.Logger.Info().Cid("Client").Log($"Local LAN IP: {localIp}");
+
+        List<ServerResponse> servers;
+        try {
+            Logger.Logger.Info().Cid("Client").Log("Discovering servers on LAN...");
+            servers = await _udpsocket.DiscoverServersAsync();
+
+            if (servers.Count == 0) {
+                Logger.Logger.Warn().Cid("Client").Log("No servers found during discovery.");
+                throw new Exception("No servers responded to discovery request.");
+            }
+
+            // Pick the first server (you can filter by name/version/etc. if needed)
+            var server = servers[0];
+            Logger.Logger.Info().Cid("Client").Log($"Found server: {server} - Attempting TCP connect...");
+
+            // Reuse the existing ConnectAsync(host, port)
+            await ConnectAsync(server.Ip, server.Port);
+        }
+        catch (OperationCanceledException) {
+            Logger.Logger.Warn().Cid("Client").Log("Server discovery timed out.");
+            throw new Exception("Server discovery timed out.");
+        }
+        catch (Exception ex) {
+            Logger.Logger.Error().Cid("Client").Log($"Failed to discover or connect to server: {ex.Message}");
+            throw;
+        }
+    }
+
+
     public async Task ConnectAsync(string host, int port) {
-        if (_socket.IsConnected)
+        if (_tcpsocket.IsConnected)
             return;
 
-        try { 
-            _socket.Tcpsocket.Connect(host, port);
+        try {
+            // Connect to IPAddress
+            _tcpsocket.Tcpsocket.Connect(host, port);
             Init();
         }
         catch (Exception ex) {
@@ -49,14 +84,14 @@ public abstract class ClientBase(TcpClient socket, PacketDispatcher dispatcher) 
     }
 
     public async Task SendAsync(Packet packet) {
-        await _socket.SendAsync(packet);
+        await _tcpsocket.SendAsync(packet);
     }
 
     public void Disconnect() {
         _cts.Cancel();
         _dispatcher.Stop();
         try {
-            _socket?.Disconnect();
+            _tcpsocket?.Disconnect();
         }
         catch (Exception ex) {
             Logger.Logger.Error().Log($"Disconnect unexpected error: {ex}");
@@ -70,14 +105,14 @@ public abstract class ClientBase(TcpClient socket, PacketDispatcher dispatcher) 
     // ========================================
 
     private async Task TimeOutCheckAsync() {
-        while (!_cts.Token.IsCancellationRequested && _socket!.IsConnected) {
+        while (!_cts.Token.IsCancellationRequested && _tcpsocket!.IsConnected) {
             try {
-                await _socket.SendAsync(new Packet("Ping"));
-                if (!_socket.IsAlive) {
-                    _socket.Disconnect();
+                await _tcpsocket.SendAsync(new Packet("Ping"));
+                if (!_tcpsocket.IsAlive) {
+                    _tcpsocket.Disconnect();
                     break;
                 }
-                await Task.Delay(_socket._config.TimeoutDelay, _cts.Token);
+                await Task.Delay(_tcpsocket._config.TimeoutDelay, _cts.Token);
             }
             catch (OperationCanceledException) {
                 break;
@@ -91,8 +126,8 @@ public abstract class ClientBase(TcpClient socket, PacketDispatcher dispatcher) 
 
     private async Task HandshakeAsync() {
         try {
-            while (!_cts.Token.IsCancellationRequested && _socket.IsConnected) {
-                var packet = await _socket.RecvAsync();
+            while (!_cts.Token.IsCancellationRequested && _tcpsocket.IsConnected) {
+                var packet = await _tcpsocket.RecvAsync();
                 if (packet != null)
                     _dispatcher.Enqueue(packet);
             }
@@ -110,7 +145,7 @@ public abstract class ClientBase(TcpClient socket, PacketDispatcher dispatcher) 
     // ========================================
 
     private void Init() {
-        _socket.InitNetworkStream();
+        _tcpsocket.InitNetworkStream();
         _dispatcher.Init();
 
         OnInit();
@@ -131,7 +166,8 @@ public abstract class ClientBase(TcpClient socket, PacketDispatcher dispatcher) 
         await (_handshakeworkerTask ?? Task.CompletedTask);
         await (_timeoutworkerTask ?? Task.CompletedTask);
 
-        _socket?.Disconnect();
+        _tcpsocket?.Disconnect();
+        _udpsocket?.Dispose();
         _cts.Dispose();
 
         GC.SuppressFinalize(this);

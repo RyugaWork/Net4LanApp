@@ -20,7 +20,8 @@ class Program {
         Logger.Warn().Cid("Warn").Log("");
         Logger.Info().Cid("Info").Log("");
 
-        await client.ConnectAsync(Network.LocalIPAddress, 5000);
+        //await client.ConnectAsync(Network.LocalIPAddress, 5000);
+        await client.ConnectAsync();
 
         // Simulate running app with graceful exit on Ctrl+C
         Console.CancelKeyPress += (s, e) => {

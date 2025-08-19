@@ -10,6 +10,7 @@ namespace Net4;
 public static class Network {
     // Gets the local machine's IPv4 address.
     public static string LocalIPAddress => GetLocalIPAddress();
+    public static IPAddress? LocalLanAddress => GetLocalLanAddress();
 
     // Retrieves the first available IPv4 address of the local machine.
     // Throws an exception if no IPv4 address is found.ns>
@@ -22,6 +23,47 @@ public static class Network {
         }
         Logger.Logger.Warn().Log("No network adapters with an IPv4 address found.");
         throw new Exception("No network adapters with an IPv4 address found.");
+    }
+
+    /// <summary>
+    /// Gets the local IPv4 address on the LAN (e.g., 192.168.x.x, 10.x.x.x).
+    ///Avoids loopback (127.0.0.1) and returns first suitab le LAN address.
+    /// </summary>
+    private static IPAddress? GetLocalLanAddress() {
+        var host = Dns.GetHostEntry(Dns.GetHostName());
+        foreach (var ip in host.AddressList) {
+            if (ip.AddressFamily == AddressFamily.InterNetwork) {
+                // Filter out loopback and prefer private IP ranges
+                if (!IPAddress.IsLoopback(ip) && IsPrivateIp(ip)) {
+                    return ip;
+                }
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Checks if an IP address is in a private (LAN) range.
+    /// </summary>
+    /// <param name="ip">The IP address to check.</param>
+    /// <returns>True if private IP, false otherwise.</returns>
+    private static bool IsPrivateIp(IPAddress ip) {
+        var addr = BitConverter.ToUInt32(ip.GetAddressBytes().Reverse().ToArray(), 0);
+
+        // 10.0.0.0/8
+        if ((addr & 0xFF000000) == 0x0A000000)
+            return true;
+        // 172.16.0.0/12
+        if ((addr & 0xFFF00000) == 0xAC100000)
+            return true;
+        // 192.168.0.0/16
+        if ((addr & 0xFFFF0000) == 0xC0A80000)
+            return true;
+        // 169.254.0.0/16 (link-local)
+        if ((addr & 0xFFFF0000) == 0xA9FE0000)
+            return true;
+
+        return false;
     }
 }
 
