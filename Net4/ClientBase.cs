@@ -151,7 +151,7 @@ public class Client(TcpClient socket) : ClientBase(socket, _dispatcher) {
     //public override async Task OnConnect() { await Task.Delay(1000); }
     public override async Task OnConnect() {
         for (int i = 0; i < 10; i++) {
-            await SendAsync(new Tcp_Mess_Pck() { Sender = "", Text = $"{i}" });
+            await SendAsync(new PacketMessage() { Sender = "", Text = $"{i}" });
             await SendAsync(new Packet("Ping"));
             await Task.Delay(1);
         }

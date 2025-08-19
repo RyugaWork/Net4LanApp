@@ -7,67 +7,6 @@ using System.Text.Json;
 namespace Net4;
 #pragma warning restore IDE0130
 
-public static class Network {
-    // Gets the local machine's IPv4 address.
-    public static string LocalIPAddress => GetLocalIPAddress();
-
-    // Retrieves the first available IPv4 address of the local machine.
-    // Throws an exception if no IPv4 address is found.ns>
-    private static string GetLocalIPAddress() {
-        var host = Dns.GetHostEntry(Dns.GetHostName());
-        foreach (var ip in host.AddressList) {
-            if (ip.AddressFamily == AddressFamily.InterNetwork) {
-                return ip.ToString();
-            }
-        }
-        Logger.Logger.Warn().Log("No network adapters with an IPv4 address found.");
-        throw new Exception("No network adapters with an IPv4 address found.");
-    }
-}
-
-public class TcpPingConfig() {
-    public int TimeoutSeconds { get; set; } = 120;
-    public int TimeoutDelay { get; set; } = 60000; 
-}
-
-public static class Json {
-    public static readonly JsonSerializerOptions Options = new() {
-        PropertyNameCaseInsensitive = true,
-        WriteIndented = false
-    };
-}
-
-public class Packet {
-    // Type of the packet 
-    public string Type { get; set; } = ""; // Packet type (e.g., "Connect", "Ping", "Message").
-    public DateTime Timestamp { get; set; } = DateTime.UtcNow; // Timestamp indicating when packet was created.
-
-    public Packet(string type) => this.Type = type;
-
-    // Serializes the current object to a JSON string using its runtime type.
-    public string Serialize() => JsonSerializer.Serialize(this, GetType(), Json.Options);
-
-    // Deserializes a JSON string into a specific Packet type based on the "type" property.
-    public static Packet? Deserialize(string json) {
-        using var doc = JsonDocument.Parse(json);
-
-        if (!doc.RootElement.TryGetProperty("Type", out var typeProp))
-            return null;
-
-        string? type = typeProp.GetString();
-        return type switch {
-            "Message" => JsonSerializer.Deserialize<Tcp_Mess_Pck>(json),
-            _ => JsonSerializer.Deserialize<Packet>(json)
-        };
-    }
-}
-
-public class Tcp_Mess_Pck : Packet {
-    public required string? Text { get; set; } = null; // Message content
-    public required string? Sender { get; set; } = null; // Sender's identifier (e.g., username)
-
-    public Tcp_Mess_Pck() : base("Message") { }
-}
 
 public class TcpSocket(TcpClient socket) : IDisposable {
     public readonly TcpClient Tcpsocket = socket;
