@@ -92,16 +92,21 @@ public abstract class ClientBase(TcpClient socket, PacketDispatcher dispatcher) 
     private async Task HandshakeAsync() {
         try {
             while (!_cts.Token.IsCancellationRequested && _socket.IsConnected) {
-                var packet = await _socket.RecvAsync();
+                var packet = await _socket.RecvAsync().ConfigureAwait(false);
                 if (packet != null)
                     _dispatcher.Enqueue(packet);
+                else
+                    break; // Connection closed gracefully
             }
         }
+        catch (IOException ioEx) {
+            Logger.Logger.Warn().Cid("HandshakeAsync").Log($"Connection lost: {ioEx.Message}");
+        }
         catch (Exception ex) {
-            Logger.Logger.Error().Cid("HandshakeAsync").Log($"failed: {ex}");
+            Logger.Logger.Error().Cid("HandshakeAsync").Log($"Unexpected error: {ex.Message}");
         }
         finally {
-            Disconnect();
+            Disconnect(); // Only one disconnect call here
         }
     }
 

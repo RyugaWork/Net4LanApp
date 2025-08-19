@@ -58,22 +58,20 @@ public class TcpSocket(TcpClient socket) : IDisposable {
 
         try {
             Logger.Logger.Info().Cid("Send").Log($"{packet}");
-            await _writer!.WriteLineAsync(json);
+            await _writer!.WriteLineAsync(json).ConfigureAwait(false);
         }
         catch (IOException ioEx) { // Signal disconnect
             // This happens when the connection is closed/reset
-            Disconnect();
             Logger.Logger.Warn().Log($"NetworkStream connection closed: {ioEx}");
-            throw new Exception($"NetworkStream connection closed: {ioEx}");
+            throw;
         }
         catch (SocketException sockEx) { // Signal disconnect
-            Disconnect();
-            Logger.Logger.Error().Log($"NetworkStream socket error: {sockEx}");
-            throw new Exception($"NetworkStream socket error: {sockEx}");
+            Logger.Logger.Warn().Log($"NetworkStream socket error: {sockEx}");
+            throw;
         }
         catch (Exception ex) {
             Logger.Logger.Error().Log($"NetworkStream unexpected error: {ex}");
-            throw new Exception($"NetworkStream unexpected error: {ex}");
+            throw;
         }
     }
 
@@ -84,7 +82,7 @@ public class TcpSocket(TcpClient socket) : IDisposable {
         }
 
         try {
-            var line = await _reader!.ReadLineAsync();
+            var line = await _reader!.ReadLineAsync().ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(line))
                 return null;
 
@@ -95,18 +93,16 @@ public class TcpSocket(TcpClient socket) : IDisposable {
         }
         catch (IOException ioEx) { // Signal disconnect
             // This happens when the connection is closed/reset
-            Disconnect();
             Logger.Logger.Warn().Log($"NetworkStream connection closed: {ioEx}");
-            throw new Exception($"NetworkStream connection closed: {ioEx}");
+            throw;
         }
         catch (SocketException sockEx) { // Signal disconnect
-            Disconnect();
-            Logger.Logger.Error().Log($"NetworkStream socket error: {sockEx}");
-            throw new Exception($"NetworkStream socket error: {sockEx}");
+            Logger.Logger.Warn().Log($"NetworkStream socket error: {sockEx}");
+            throw;
         }
         catch (Exception ex) {
             Logger.Logger.Error().Log($"NetworkStream unexpected error: {ex}");
-            throw new Exception($"NetworkStream unexpected error: {ex}");
+            throw;
         }
     }
 
