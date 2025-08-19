@@ -13,6 +13,13 @@ class Program {
     static async Task Main(string[] args) {
         var client = new Client(new TcpClient());
 
+        Logger.Trace().Log("Trace");
+        Logger.Critical().Log("Critical");
+        Logger.Debug().Log("Debug");
+        Logger.Error().Log("Error");
+        Logger.Warn().Log("Warn");
+        Logger.Info().Log("Info");
+
         await client.ConnectAsync(Network.LocalIPAddress, 5000);
 
         // Simulate running app with graceful exit on Ctrl+C

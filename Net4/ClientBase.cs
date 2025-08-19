@@ -101,14 +101,14 @@ public abstract class ClientBase(TcpClient socket) {
 
 public class Client(TcpClient socket) : ClientBase(socket) {
 
-    //public override async Task OnConnect() { await Task.Delay(1000); }
-    public override async Task OnConnect() { 
-        for(int i=0;i<10;i++) {
-            await SendAsync(new Tcp_Mess_Pck() { Sender = "", Text = ""});
-            await SendAsync(new Packet("Ping"));
-            await Task.Delay(1);
-        }
-    }
+    public override async Task OnConnect() { await Task.Delay(1000); }
+    //public override async Task OnConnect() { 
+    //    for(int i=0;i<10;i++) {
+    //        await SendAsync(new Tcp_Mess_Pck() { Sender = "", Text = ""});
+    //        await SendAsync(new Packet("Ping"));
+    //        await Task.Delay(1);
+    //    }
+    //}
 
     public override void OnInit() {
         RegisterHandler("Ping", OnPing, 10);
