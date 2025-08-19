@@ -13,12 +13,12 @@ class Program {
     static async Task Main(string[] args) {
         var client = new Client(new TcpClient());
 
-        Logger.Trace().Log("Trace");
-        Logger.Critical().Log("Critical");
-        Logger.Debug().Log("Debug");
-        Logger.Error().Log("Error");
-        Logger.Warn().Log("Warn");
-        Logger.Info().Log("Info");
+        Logger.Trace().Cid("Trace").Log("");
+        Logger.Critical().Cid("Critical").Log("");
+        Logger.Debug().Cid("Debug").Log("");
+        Logger.Error().Cid("Error").Log("");
+        Logger.Warn().Cid("Warn").Log("");
+        Logger.Info().Cid("Info").Log("");
 
         await client.ConnectAsync(Network.LocalIPAddress, 5000);
 

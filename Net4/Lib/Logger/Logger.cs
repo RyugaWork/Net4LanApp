@@ -1,17 +1,8 @@
 ﻿using Microsoft.Extensions.Logging;
-using Net4.Logger;
-using System;
-using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Reflection.Metadata;
-using System.Runtime.CompilerServices;
-using System.Text.RegularExpressions;
 
 #pragma warning disable IDE0130
 namespace Net4.Logger;
 #pragma warning restore IDE0130
-
-
 
 public class LoggerBuilder(LogLevel level, string? cid = null, LoggerConfig? config = null, LoggerFilter? filter = null) {
     private readonly LogLevel _level = level;
@@ -27,7 +18,7 @@ public class LoggerBuilder(LogLevel level, string? cid = null, LoggerConfig? con
 #if DEBUG // Debug | Release
         builder.SetMinimumLevel(LogLevel.Trace); // This enables all levels
 #else
-        builder.AddProvider(new FileLoggerProvider(_config));
+        builder.AddProvider(new FileLoggerProvider(new LoggerConfig()));
 #endif
 
     });
