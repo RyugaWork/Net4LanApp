@@ -30,15 +30,22 @@ public class TcpPingConfig() {
     public int TimeoutDelay { get; set; } = 60000; 
 }
 
+public static class Json {
+    public static readonly JsonSerializerOptions Options = new() {
+        PropertyNameCaseInsensitive = true,
+        WriteIndented = false
+    };
+}
+
 public class Packet {
     // Type of the packet 
     public string Type { get; set; } = ""; // Packet type (e.g., "Connect", "Ping", "Message").
-    public DateTime Timestamp { get; set; } = DateTime.Now; // Timestamp indicating when packet was created.
+    public DateTime Timestamp { get; set; } = DateTime.UtcNow; // Timestamp indicating when packet was created.
 
     public Packet(string type) => this.Type = type;
 
     // Serializes the current object to a JSON string using its runtime type.
-    public string Serialize() => JsonSerializer.Serialize(this, GetType());
+    public string Serialize() => JsonSerializer.Serialize(this, GetType(), Json.Options);
 
     // Deserializes a JSON string into a specific Packet type based on the "type" property.
     public static Packet? Deserialize(string json) {
@@ -79,16 +86,14 @@ public class TcpSocket(TcpClient socket) : IDisposable {
         this.Tcpstream = Tcpsocket!.GetStream();
 
         try {
-            // Create a StreamReader for reading from the TCP stream
-            this._reader = new StreamReader(Tcpstream!, Encoding.UTF8);
-
-            // Create a StreamWriter for writing to the TCP stream (auto-flush enabled)
+            // Reuse the same StreamReader/Writer
+            this._reader = new StreamReader(Tcpstream, Encoding.UTF8);
             var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-            _writer = new StreamWriter(Tcpstream!, utf8NoBom) { AutoFlush = true };
+            _writer = new StreamWriter(Tcpstream, utf8NoBom) { AutoFlush = true };
         }
         catch (Exception ex) {
-            Logger.Logger.Error().Log($"NetworkStream unexpected error: {ex}");
-            throw new Exception($"NetworkStream unexpected error: {ex}");
+            Logger.Logger.Error().Log($"NetworkStream init error: {ex}");
+            throw new InvalidOperationException($"Failed to initialize network stream: {ex.Message}", ex);
         }
     }
 
@@ -109,15 +114,12 @@ public class TcpSocket(TcpClient socket) : IDisposable {
             Logger.Logger.Warn().Log("NetworkStream is not initiated");
             throw new Exception("NetworkStream is not initiated");
         }
-            
 
-        var Serpacket = packet.Serialize() + "\n";
-        var data = Encoding.UTF8.GetBytes(Serpacket);
+        var json = packet.Serialize();
 
         try {
             Logger.Logger.Info().Cid("Send").Log($"{packet}");
-            await Tcpstream.WriteAsync(data);
-            await Tcpstream.FlushAsync();
+            await _writer!.WriteLineAsync(json);
         }
         catch (IOException ioEx) { // Signal disconnect
             // This happens when the connection is closed/reset
@@ -139,18 +141,17 @@ public class TcpSocket(TcpClient socket) : IDisposable {
     public async Task<Packet?> RecvAsync() {
         if (Tcpstream == null) {
             Logger.Logger.Warn().Log("NetworkStream is not initiated");
-            throw new Exception("NetworkStream is not initiated");
+            throw new InvalidOperationException("NetworkStream is not initialized. Call InitNetworkStream first.");
         }
-            
-        try {
-            using var reader = new StreamReader(Tcpstream, Encoding.UTF8, leaveOpen: true);
-            var data = await reader.ReadLineAsync();
 
-            if (string.IsNullOrWhiteSpace(data))
+        try {
+            var line = await _reader!.ReadLineAsync();
+            if (string.IsNullOrWhiteSpace(line))
                 return null;
 
-            var packet = Packet.Deserialize(data);
-            Logger.Logger.Info().Cid("Recv").Log($"{packet}");
+            var packet = Packet.Deserialize(line);
+            if (packet != null)
+                Logger.Logger.Info().Cid("Recv").Log($"{packet.Serialize()}");
             return packet;
         }
         catch (IOException ioEx) { // Signal disconnect

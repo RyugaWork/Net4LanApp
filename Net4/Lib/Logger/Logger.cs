@@ -75,7 +75,7 @@ public class LoggerBuilder(LogLevel level, string? cid = null, LoggerConfig? con
 public static class Logger {
 
     private static readonly LoggerFilter? _filter = new LoggerFilter {
-        //AllowedCorrelationIds = new HashSet<string> { "Recv" }
+        AllowedCorrelationIds = new HashSet<string> { "Recv" }
     };
 
     public static LoggerBuilder Trace() => new LoggerBuilder(LogLevel.Trace).Filter(_filter);
