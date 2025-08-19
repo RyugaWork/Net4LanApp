@@ -1,84 +1,55 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Sockets;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Net.Sockets;
 
 namespace Net4;
 
-public abstract class ClientBase(TcpClient socket) {
+public abstract class ClientBase(TcpClient socket, PacketDispatcher dispatcher) : IAsyncDisposable {
     private readonly TcpSocket _socket = new TcpSocket(socket);
     private readonly CancellationTokenSource _cts = new CancellationTokenSource();
     private Task? _handshakeworkerTask;
     private Task? _timeoutworkerTask;
-    private readonly PacketDispatcher _dispatcher = new();
+    private readonly PacketDispatcher _dispatcher = dispatcher;
 
-    public void RegisterHandler(string type, Func<Packet, Task> handler, int priority = 0) 
-        => _dispatcher.RegisterHandler(type, handler, priority);
+    // ========================================
+    // Public API
+    // ========================================
+
     public void UpdateLastPing() => _socket.UpdateLastPing();
 
-    private void Init() {
-        _socket.InitNetworkStream();
-        _dispatcher.Init();
-
-        OnInit();
-    }
+    // Called once during initialization after network stream setup.
+    // Override to register handlers.
+    public abstract void OnInit();
+    // Called after successful connection. Perform handshake logic here.
+    public abstract Task OnConnect();
 
     public void Connect() {
-        Logger.Logger.Info($"Client connected!", "Server");
+        Logger.Logger.Info().Cid("Server").Log($"Client connected!");
         Init();
 
-        _handshakeworkerTask = Task.Run(() => HandshakeAsync());
-        _timeoutworkerTask = Task.Run(() => TimeOutCheckAsync());
+        StartBackgroundWorkers();
     }
-
-    public async Task SendAsync(Packet packet) {
-        await _socket.SendAsync(packet);
-    }
-    public abstract void OnInit();
-    public abstract Task OnConnect();
 
     public async Task ConnectAsync(string host, int port) {
         if (_socket.IsConnected)
             return;
 
         try { 
-            _socket!.Tcpsocket!.Connect(host, port);
+            _socket.Tcpsocket.Connect(host, port);
             Init();
         }
         catch (Exception ex) {
-            Logger.Logger.Error($"Connection unexpected error: {ex}");
+            Logger.Logger.Error().Log($"Connection unexpected error: {ex}");
             throw new Exception($"Connection unexpected error: {ex}");
         }   
 
         await OnConnect();
 
-        Logger.Logger.Info($"Client connected to {host}:{port}","Client");
+        Logger.Logger.Info().Cid("Client").Log($"Client connected to {host}:{port}");
 
-        _handshakeworkerTask = Task.Run(() => HandshakeAsync());
-        _timeoutworkerTask = Task.Run(() => TimeOutCheckAsync());
+        StartBackgroundWorkers();
     }
 
-    private async Task TimeOutCheckAsync() {
-        while (!_cts.Token.IsCancellationRequested && _socket!.IsConnected) { 
-            await _socket.SendAsync(new Packet("Ping"));
-            if (!_socket.IsAlive) {
-                _socket.Disconnect();
-                break;
-            }
-            await Task.Delay(_socket._config.TimeoutDelay, _cts.Token);
-        }
-    }
-
-    private async Task HandshakeAsync() {
-        while (!_cts.Token.IsCancellationRequested && _socket!.IsConnected) {
-            var packet = await _socket.RecvAsync();
-
-            if (packet != null) {
-                _dispatcher.Enqueue(packet);
-            }
-        }
+    public async Task SendAsync(Packet packet) {
+        await _socket.SendAsync(packet);
     }
 
     public void Disconnect() {
@@ -88,31 +59,112 @@ public abstract class ClientBase(TcpClient socket) {
             _socket?.Disconnect();
         }
         catch (Exception ex) {
-            Logger.Logger.Error($"Disconnect unexpected error: {ex}");
+            Logger.Logger.Error().Log($"Disconnect unexpected error: {ex}");
             throw new Exception($"Disconnect unexpected error: {ex}");
         }
 
     }
+
+    // ========================================
+    // Background Workers
+    // ========================================
+
+    private async Task TimeOutCheckAsync() {
+        while (!_cts.Token.IsCancellationRequested && _socket!.IsConnected) {
+            try {
+                await _socket.SendAsync(new Packet("Ping"));
+                if (!_socket.IsAlive) {
+                    _socket.Disconnect();
+                    break;
+                }
+                await Task.Delay(_socket._config.TimeoutDelay, _cts.Token);
+            }
+            catch (OperationCanceledException) {
+                break;
+            }
+            catch (Exception ex) {
+                Logger.Logger.Error().Cid("TimeOutCheckAsync").Log($"failed: {ex}");
+                break;
+            }
+        }
+    }
+
+    private async Task HandshakeAsync() {
+        try {
+            while (!_cts.Token.IsCancellationRequested && _socket.IsConnected) {
+                var packet = await _socket.RecvAsync().ConfigureAwait(false);
+                if (packet != null)
+                    _dispatcher.Enqueue(packet);
+                else
+                    break; // Connection closed gracefully
+            }
+        }
+        catch (IOException ioEx) {
+            Logger.Logger.Warn().Cid("HandshakeAsync").Log($"Connection lost: {ioEx.Message}");
+        }
+        catch (Exception ex) {
+            Logger.Logger.Error().Cid("HandshakeAsync").Log($"Unexpected error: {ex.Message}");
+        }
+        finally {
+            Disconnect(); // Only one disconnect call here
+        }
+    }
+
+    // ========================================
+    // Lifecycle & Disposal
+    // ========================================
+
+    private void Init() {
+        _socket.InitNetworkStream();
+        _dispatcher.Init();
+
+        OnInit();
+    }
+
+    private void StartBackgroundWorkers() {
+        _handshakeworkerTask = Task.Run(HandshakeAsync, _cts.Token);
+        _timeoutworkerTask = Task.Run(TimeOutCheckAsync, _cts.Token);
+    }
+
+    public async ValueTask DisposeAsync() {
+        if (!_cts.IsCancellationRequested) {
+            _cts.Cancel();
+        }
+
+        _dispatcher.Stop();
+
+        await (_handshakeworkerTask ?? Task.CompletedTask);
+        await (_timeoutworkerTask ?? Task.CompletedTask);
+
+        _socket?.Disconnect();
+        _cts.Dispose();
+
+        GC.SuppressFinalize(this);
+    }
+
+    public void Dispose() => DisposeAsync().GetAwaiter().GetResult();
 
     ~ClientBase() {
         Disconnect();
     }
 }
 
-public class Client(TcpClient socket) : ClientBase(socket) {
+public class Client(TcpClient socket) : ClientBase(socket, _dispatcher) {
+
+    private static readonly PacketDispatcher _dispatcher = new();
 
     //public override async Task OnConnect() { await Task.Delay(1000); }
-    public override async Task OnConnect() { 
-        for(int i=0;i<10;i++) {
-            await SendAsync(new Tcp_Mess_Pck() { Sender = "", Text = ""});
+    public override async Task OnConnect() {
+        for (int i = 0; i < 10; i++) {
+            await SendAsync(new PacketMessage() { Sender = "", Text = $"{i}" });
             await SendAsync(new Packet("Ping"));
             await Task.Delay(1);
         }
     }
 
     public override void OnInit() {
-        RegisterHandler("Ping", OnPing, 10);
-        RegisterHandler("Message", OnPing, 0);
+        _dispatcher.RegisterHandler("Ping", OnPing, 10);
+        _dispatcher.RegisterHandler("Message", OnPing, 0);
     }
 
     private async Task OnPing(Packet packet) => UpdateLastPing();

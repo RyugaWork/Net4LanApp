@@ -11,9 +11,14 @@ namespace ClientApp;
 
 class Program {
     static async Task Main(string[] args) {
-        Logger.Configure();
-
         var client = new Client(new TcpClient());
+
+        Logger.Trace().Cid("Trace").Log("");
+        Logger.Critical().Cid("Critical").Log("");
+        Logger.Debug().Cid("Debug").Log("");
+        Logger.Error().Cid("Error").Log("");
+        Logger.Warn().Cid("Warn").Log("");
+        Logger.Info().Cid("Info").Log("");
 
         await client.ConnectAsync(Network.LocalIPAddress, 5000);
 
@@ -22,7 +27,7 @@ class Program {
             Environment.Exit(0);
         };
         while (true) {
-            Logger.Info("Client is running - Ctr + C to exit");
+            Logger.Info().Log("Client is running - Ctr + C to exit");
             await Task.Delay(60000);
         }
     }

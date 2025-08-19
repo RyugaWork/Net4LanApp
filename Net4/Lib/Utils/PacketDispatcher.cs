@@ -1,13 +1,4 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Sockets;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
-using System.Text.Json;
-using System.Threading.Tasks;
+﻿using System.Collections.Concurrent;
 
 #pragma warning disable IDE0130
 namespace Net4;
@@ -31,7 +22,7 @@ public class PacketDispatcher(int workerCount = 1) {
     // Enqueue a packet with a given priority.
     public void Enqueue(Packet packet) {
         int priority = _priorities[packet.Type!];
-        Logger.Logger.Info($"Enqueue packet: {packet.Serialize()}", "PacketDispatcher");
+        Logger.Logger.Debug().Cid("PacketDispatcher").Log($"Enqueue packet: {packet}");
         lock (_lock) {
             // Negative priority because PriorityQueue is min-heap by default
             _queue.Enqueue(packet, -priority);
@@ -42,7 +33,7 @@ public class PacketDispatcher(int workerCount = 1) {
     // Initilize worker thread
     public void Init() {
         for (int i = 1; i <= _workerCount; i++) {
-            Logger.Logger.Info($"Init woker [{i}]", "PacketDispatcher");
+            Logger.Logger.Debug().Cid("PacketDispatcher").Log($"Init woker [{i}]");
             _ = Task.Run(() => Job());
         }
     }
@@ -63,17 +54,17 @@ public class PacketDispatcher(int workerCount = 1) {
     }
 
     private async Task HandlePacket(Packet packet) {
-        Logger.Logger.Info($"Handling ticket: {JsonSerializer.Serialize(packet)}", "PacketDispatcher");
+        Logger.Logger.Debug().Cid("PacketDispatcher").Log($"Handling ticket: {packet}");
         if (_handlers.TryGetValue(packet.Type ?? "", out var handler)) {
             try {
                 await handler(packet);
             }
             catch (Exception ex) {
-                Logger.Logger.Error($"Packet {packet.Type} failed: {ex}");
+                Logger.Logger.Error().Log($"Packet {packet.Type} failed: {ex}");
             }
         }
         else {
-            Logger.Logger.Warn($"No handler for type {packet.Type}");
+            Logger.Logger.Warn().Log($"No handler for type {packet.Type}");
         }
     }
 

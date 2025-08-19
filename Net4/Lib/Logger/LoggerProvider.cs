@@ -1,86 +1,9 @@
 ﻿using Microsoft.Extensions.Logging;
-using System;
 using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
 
 #pragma warning disable IDE0130
 namespace Net4.Logger;
 #pragma warning restore IDE0130
-
-/// <summary>
-/// Logger configuration class
-/// </summary>  
-public class LoggerConfig {
-
-#if DEBUG // Debug | Release
-    public readonly string Mode = "Debug"; 
-#else
-    public readonly string Mode = "Release"; 
-#endif
-    public string CustomFormat { get; set; } = "[{Mode}][{Timestamp}] [{Level}] ({CorrelationId}): {Message}";
-    public string TimeFormat { get; set; } = "HH:mm:ss.ffff";
-}
-
-/// <summary>
-/// Static Logger wrapper using Microsoft.Extensions.Logging
-/// </summary>
-public static class Logger {
-    private static ILoggerFactory? _factory;
-    private static LoggerConfig _config = new();
-
-    public static void Configure(LoggerConfig? config = null) {
-        _config = config ?? new LoggerConfig();
-
-        _factory = LoggerFactory.Create(builder => {
-            builder.ClearProviders();
-            builder.AddConsole();
-            #if DEBUG // Debug | Release
-
-            #else
-                builder.AddProvider(new FileLoggerProvider(_config));
-            #endif
-
-        });
-    }
-
-    private static ILogger GetLogger() {
-        if (_factory == null)
-            throw new InvalidOperationException("Logger not configured. Call Logger.Configure() first.");
-
-        // Walk stack to find the *caller of Logger.Info/Warn/Error/Debug*
-        var stack = new StackTrace();
-        var frame = stack.GetFrame(2); // 0 = GetLogger, 1 = Info(), 2 = real caller
-        var method = frame?.GetMethod();
-        var type = method?.DeclaringType?.Name ?? "UnknownClass";
-        var methodName = method?.Name ?? "UnknownMethod";
-
-        var category = $"{type}.{methodName}";
-        return _factory.CreateLogger(category);
-    }
-
-    private static string FormatMessage(LogLevel level, string message, string? correlationId) {
-        var timestamp = DateTime.UtcNow.ToString(_config.TimeFormat);
-        return _config.CustomFormat
-            .Replace("{Mode}", _config.Mode)
-            .Replace("{Timestamp}", timestamp)
-            .Replace("{Level}", level.ToString())
-            .Replace("{CorrelationId}", correlationId ?? Guid.NewGuid().ToString("N")[..6])
-            .Replace("{Message}", message);
-    }
-
-    public static void Info(string message, string? correlationId = null) =>
-        GetLogger().LogInformation(FormatMessage(LogLevel.Information, message, correlationId));
-
-    public static void Warn(string message, string? correlationId = null) =>
-        GetLogger().LogWarning(FormatMessage(LogLevel.Warning, message, correlationId));
-
-    public static void Error(string message, string? correlationId = null) =>
-        GetLogger().LogError(FormatMessage(LogLevel.Error, message, correlationId));
-
-    public static void Debug(string message, string? correlationId = null) =>
-        GetLogger().LogDebug(FormatMessage(LogLevel.Debug, message, correlationId));
-}
 
 public class FileLoggerProvider : ILoggerProvider {
     private readonly string _filePath;
@@ -171,7 +94,7 @@ public class AsyncFileLogger : ILogger {
         var timestamp = DateTime.UtcNow.ToString(_config.TimeFormat);
         var message = formatter(state, exception);
 
-        var logLine = $"{message}"; 
+        var logLine = $"{message}";
         if (exception != null)
             logLine += Environment.NewLine + exception;
 
