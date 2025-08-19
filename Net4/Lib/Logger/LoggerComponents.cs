@@ -1,11 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 #pragma warning disable IDE0130
 namespace Net4.Logger;
@@ -42,7 +37,7 @@ public static class LogFormatter {
         var placeholders = new Dictionary<string, string?> {
             ["{Mode}"] = config.Mode,
             ["{Timestamp}"] = DateTime.UtcNow.ToString(config.TimeFormat),
-            ["{Tickstamp}"] = DateTime.UtcNow.Ticks.ToString(), // More meaningful than ToString(format)
+            ["{Tickstamp}"] = DateTime.UtcNow.ToString(config.TickFormat),
             ["{Level}"] = level.ToString(),
             ["{CorrelationId}"] = correlationId ?? Guid.NewGuid().ToString("N")[..6],
             ["{Message}"] = message
@@ -61,7 +56,7 @@ public static class LogFormatter {
 public static class LoggerHelper {
     public static ILogger GetCallerLogger(ILoggerFactory factory) {
         var stack = new StackTrace();
-        var frame = stack.GetFrame(2); // 0=GetCallerLogger, 1=caller in LoggerBuilder, 2=actual user method
+        var frame = stack.GetFrame(3); // 0=GetCallerLogger, 1,2=caller in LoggerBuilder, 3=actual user method
         var method = frame?.GetMethod();
         var type = method?.DeclaringType?.Name ?? "UnknownClass";
         var methodName = method?.Name ?? "UnknownMethod";
