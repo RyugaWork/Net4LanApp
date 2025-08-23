@@ -68,49 +68,114 @@ public class UdpSocket : IDisposable
         return false;
     }
 
-    /// <summary>
-    /// Sends a broadcast message to discover servers on the LAN.
-    /// </summary>
-    /// <param name="message">The discovery message (default: "DISCOVER_SERVER").</param>
-    /// <param name="broadcastPort">Port to broadcast to (default: 44444).</param>
-    /// <param name="timeoutMs">How long to wait for responses (default: 3000 ms).</param>
-    /// <returns>List of servers that responded.</returns>
-    public async Task<List<ServerResponse>> DiscoverServersAsync(
-        string message = "DISCOVER_SERVER",
-        int broadcastPort = DefaultBroadcastPort,
-        int timeoutMs = 3000)
-    {
+    public async Task<List<ServerResponse>> DiscoverServersByScanAsync(
+        string baseIp = "192.168.89",
+        int port = 44444,
+        int timeoutMs = 3000) {
         var responses = new List<ServerResponse>();
-        var timeoutToken = new CancellationTokenSource(timeoutMs).Token;
+        var tasks = new List<Task>();
 
-        // Start listening before sending broadcast
-        var listenTask = ListenForResponsesAsync(responses, timeoutToken);
+        // Scan typical IP range (1-254)
+        for (int i = 1; i <= 254; i++) {
+            var ip = $"{baseIp}.{i}";
+            if (ip == GetLocalIpAddress())
+                continue; // Skip self
 
-        try
-        {
-            // Send broadcast
-            var broadcastEp = new IPEndPoint(IPAddress.Broadcast, broadcastPort);
-            var data = Encoding.UTF8.GetBytes(message);
-            await _client.SendAsync(data, data.Length, broadcastEp);
-
-            Logger.Logger.Info().Cid("UdpSocket").Log($"Broadcast sent: '{message}' to port {broadcastPort}");
-        }
-        catch (Exception ex)
-        {
-            Logger.Logger.Error().Cid("UdpSocket").Log($"Failed to send broadcast: {ex.Message}");
+            var task = TestServerAsync(ip, port, responses, timeoutMs);
+            tasks.Add(task);
         }
 
-        // Wait for timeout or completion
-        try
-        {
-            await listenTask;
-        }
-        catch (OperationCanceledException)
-        {
-            // Expected on timeout
-        }
+        // Wait for all scans to complete (with timeout)
+        await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromMilliseconds(timeoutMs * 2));
 
         return responses;
+    }
+
+    public async Task<List<ServerResponse>> DiscoverServersEnhancedAsync(
+        string message = "DISCOVER_SERVER",
+        int broadcastPort = DefaultBroadcastPort,
+        int timeoutMs = 3000) {
+        var allResponses = new List<ServerResponse>();
+
+        Logger.Logger.Info().Cid("UdpSocket").Log("Starting enhanced discovery...");
+
+        // Try localhost first (for same-machine testing)
+        var localhostResponses = await DiscoverLocalhostAsync(message, broadcastPort, 1000);
+        if (localhostResponses.Any()) {
+            allResponses.AddRange(localhostResponses);
+            Logger.Logger.Info().Cid("UdpSocket").Log($"Found {localhostResponses.Count} servers on localhost");
+            return allResponses;
+        }
+
+        // Try broadcast (works on different machines)
+        Logger.Logger.Info().Cid("UdpSocket").Log("Attempting broadcast discovery...");
+        var broadcastResponses = await DiscoverServersAsync(message, broadcastPort, 2000);
+
+        if (broadcastResponses.Any()) {
+            allResponses.AddRange(broadcastResponses);
+            Logger.Logger.Info().Cid("UdpSocket").Log($"Found {broadcastResponses.Count} servers via broadcast");
+            return allResponses;
+        }
+
+        // Fallback to IP scanning (for WiFi networks)
+        Logger.Logger.Info().Cid("UdpSocket").Log("Falling back to IP scan...");
+        var localIp = GetLocalIpAddress();
+        var baseIp = localIp.Substring(0, localIp.LastIndexOf('.'));
+
+        var scanResponses = await DiscoverServersByScanAsync(baseIp, broadcastPort, timeoutMs);
+        allResponses.AddRange(scanResponses);
+
+        Logger.Logger.Info().Cid("UdpSocket").Log($"Found {scanResponses.Count} servers via scan");
+        return allResponses;
+    }
+
+    private async Task TestServerAsync(string ip, int port, List<ServerResponse> responses, int timeoutMs) {
+        try {
+            using var client = new UdpClient();
+            client.Client.ReceiveTimeout = timeoutMs;
+            client.Client.SendTimeout = timeoutMs;
+
+            var ep = new IPEndPoint(IPAddress.Parse(ip), port);
+
+            // Send discovery message
+            var message = Encoding.UTF8.GetBytes("DISCOVER_SERVER");
+            await client.SendAsync(message, message.Length, ep);
+
+            // Wait for response
+            var response = await client.ReceiveAsync();
+            var responseText = Encoding.UTF8.GetString(response.Buffer);
+
+            ServerResponse? server;
+            try {
+                server = JsonSerializer.Deserialize<ServerResponse>(responseText);
+            }
+            catch {
+                server = new ServerResponse {
+                    Name = responseText.Trim(),
+                    Ip = response.RemoteEndPoint.Address.ToString(),
+                    Port = response.RemoteEndPoint.Port
+                };
+            }
+
+            if (server != null) {
+                lock (responses)
+                    responses.Add(server);
+                Logger.Logger.Info().Cid("UdpSocket").Log($"Server found via scan: {server}");
+            }
+        }
+        catch {
+            // Timeout or no response - server not found at this IP
+        }
+    }
+
+    private string GetLocalIpAddress() {
+        var host = Dns.GetHostEntry(Dns.GetHostName());
+        foreach (var ip in host.AddressList) {
+            if (ip.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(ip)) {
+                return ip.ToString();
+            }
+        }
+        return "127.0.0.1";
     }
 
     /// <summary>

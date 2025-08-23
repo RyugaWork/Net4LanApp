@@ -5,83 +5,115 @@ using System.Text.Json;
 
 namespace Net4;
 
-public class ServerBase(int port) {
+public class ServerBase : IDisposable {
+    private readonly int _port;
     private readonly CancellationTokenSource _cts = new CancellationTokenSource();
-    private TcpListener? Tcplistener { get; set; } = new TcpListener(IPAddress.Parse(Network.LocalIPAddress), port);
-    private List<ClientBase> _clients { get; set; } = new List<ClientBase>();
-    private UdpSocket? _udpSocket; // For responding to discovery
-    private Task? _listenerworkerTask;
+    private TcpListener? _tcpListener;
+    private UdpClient? _udpClient;
+    private List<ClientBase> _clients = new List<ClientBase>();
+    private Task? _listenerTask;
+    private Task? _udpTask;
 
-    public int ListeningPort => ((IPEndPoint)Tcplistener!.LocalEndpoint).Port;
+    public int ListeningPort => _port;
+
+    public ServerBase(int port = 0) {
+        _port = port;
+    }
 
     public void Start() {
-        _listenerworkerTask = Task.Run(() => Listener());
+        // Start TCP listener
+        var localIp = IPAddress.Parse(Network.LocalIPAddress);
+        _tcpListener = new TcpListener(localIp, _port);
+        _tcpListener.Start();
 
-        // Start UDP responder for LAN discovery
-        _udpSocket = new UdpSocket();
-        _ = Task.Run(UdpDiscoveryResponder, _cts.Token);
+        var actualPort = ((IPEndPoint)_tcpListener.LocalEndpoint).Port;
+        Logger.Logger.Info().Cid("Server").Log($"Server TCP listening on {Network.LocalIPAddress}:{actualPort}");
+
+        // Start UDP discovery responder on standard port
+        _udpTask = Task.Run(UdpDiscoveryResponder, _cts.Token);
+
+        // Start TCP client listener
+        _listenerTask = Task.Run(Listener, _cts.Token);
     }
 
     /// <summary>
-    /// Responds to UDP broadcast discovery messages (e.g., "DISCOVER_SERVER").
+    /// Responds to UDP broadcast discovery messages
     /// </summary>
     private async Task UdpDiscoveryResponder() {
         const string discoveryMessage = "DISCOVER_SERVER";
-        const string responseKey = "ServerDiscovery";
+        const int discoveryPort = UdpSocket.DefaultBroadcastPort; // 44444
 
-        while (!_cts.Token.IsCancellationRequested) {
+        try {
+            // Bind to all interfaces to handle both network and localhost requests
+            _udpClient = new UdpClient(discoveryPort);
+            _udpClient.EnableBroadcast = true;
+
+            Logger.Logger.Info().Cid("Discovery").Log($"UDP discovery responder started on port {discoveryPort}");
+            // ... rest of your existing code
+        }
+        catch (Exception ex) {
+            // If port is in use, try binding to localhost only
             try {
-                var result = await _udpSocket!._client.ReceiveAsync(_cts.Token);
-
-                var msg = Encoding.UTF8.GetString(result.Buffer);
-                if (msg.Contains(discoveryMessage)) {
-                    var response = new ServerResponse {
-                        Name = "Net4 Game Server",
-                        Ip = Network.LocalIPAddress,
-                        Port = ListeningPort,
-                        Version = "3.0.0"
-                    };
-
-                    var json = JsonSerializer.Serialize(response);
-                    var data = Encoding.UTF8.GetBytes(json);
-
-                    await _udpSocket._client.SendAsync(data, data.Length, result.RemoteEndPoint);
-                    Logger.Logger.Info().Cid(responseKey)
-                        .Log($"Discovery response sent to {result.RemoteEndPoint}");
-                }
+                _udpClient = new UdpClient(new IPEndPoint(IPAddress.Loopback, discoveryPort));
+                _udpClient.EnableBroadcast = true;
+                Logger.Logger.Info().Cid("Discovery").Log($"UDP discovery responder started on localhost:{discoveryPort}");
             }
-            catch (OperationCanceledException) {
-                break;
-            }
-            catch (Exception ex) when (!_cts.Token.IsCancellationRequested) {
-                Logger.Logger.Error().Cid(responseKey)
-                    .Log($"UDP discovery responder error: {ex.Message}");
+            catch (Exception ex2) {
+                Logger.Logger.Error().Cid("Discovery")
+                    .Log($"Failed to start UDP discovery on any interface: {ex.Message}, {ex2.Message}");
+                return;
             }
         }
+
+        // ... rest of your existing code
     }
 
     private void Listener() {
-        Tcplistener!.Start();
+        try {
+            Logger.Logger.Info().Cid("Listener").Log("TCP listener started");
 
-        Logger.Logger.Info().Cid("Listener").Log($"Server started listen on {Network.LocalIPAddress}:{ListeningPort}");
+            while (!_cts.Token.IsCancellationRequested && _tcpListener != null) {
+                try {
+                    var tcpClient = _tcpListener.AcceptTcpClient();
+                    var client = new Client(tcpClient);
+                    client.Connect();
 
-        while (!_cts.Token.IsCancellationRequested && Tcplistener != null) {
-            var socket = Tcplistener!.AcceptTcpClient();
-            var client = new Client(socket);
-            client.Connect();
-
-            _clients!.Add(client);
+                    _clients.Add(client);
+                    Logger.Logger.Info().Cid("Listener").Log($"New client connected!");
+                }
+                catch (ObjectDisposedException) {
+                    // Listener stopped
+                    break;
+                }
+                catch (Exception ex) {
+                    if (!_cts.Token.IsCancellationRequested) {
+                        Logger.Logger.Error().Cid("Listener").Log($"Error accepting client: {ex.Message}");
+                    }
+                }
+            }
+        }
+        catch (Exception ex) {
+            Logger.Logger.Error().Cid("Listener").Log($"Listener error: {ex.Message}");
         }
     }
 
-
-    ~ServerBase() {
+    public void Dispose() {
         _cts.Cancel();
-        Tcplistener?.Stop();
-        Tcplistener = null;
+
+        try {
+            _tcpListener?.Stop();
+        }
+        catch { }
+
+        try {
+            _udpClient?.Dispose();
+        }
+        catch { }
+
+        _cts.Dispose();
     }
 }
- 
-public class Server(int port = 0) : ServerBase(port) {
 
+public class Server : ServerBase {
+    public Server(int port = 0) : base(port) { }
 }

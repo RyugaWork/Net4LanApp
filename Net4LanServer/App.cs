@@ -11,7 +11,7 @@ namespace ServerApp;
 class Program {
     static async Task Main(string[] args) {
 
-        var server = new Server(0);
+        var server = new Server(50000);
         server.Start();
 
         // Simulate running app with graceful exit on Ctrl+C

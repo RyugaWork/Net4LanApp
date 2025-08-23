@@ -37,7 +37,7 @@ public abstract class ClientBase(TcpClient socket, PacketDispatcher dispatcher) 
         List<ServerResponse> servers;
         try {
             Logger.Logger.Info().Cid("Client").Log("Discovering servers on LAN...");
-            servers = await _udpsocket.DiscoverServersAsync();
+            servers = await _udpsocket.DiscoverServersByScanAsync();
 
             if (servers.Count == 0) {
                 Logger.Logger.Warn().Cid("Client").Log("No servers found during discovery.");
@@ -188,7 +188,7 @@ public class Client(TcpClient socket) : ClientBase(socket, _dispatcher) {
     public override async Task OnConnect() {
         for (int i = 0; i < 10; i++) {
             await SendAsync(new Tcp_Mess_Pck() { Sender = "", Text = $"{i}" });
-            await SendAsync(new Packet("Ping"));
+            //await SendAsync(new Packet("Ping"));
             await Task.Delay(1);
         }
     }
