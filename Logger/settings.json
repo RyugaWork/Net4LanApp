@@ -1,0 +1,9 @@
+﻿{
+  "Logger": {
+    "Format": {
+      "Message": "[{Mode}][{Timestamp}]\n[{Level}][{Tickstamp}]: ({CorrelationId}) {Message}",
+      "Time": "HH:mm:ss",
+      "Tick": "ffff"
+    }
+  }
+}
