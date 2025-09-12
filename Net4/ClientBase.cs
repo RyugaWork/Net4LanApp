@@ -22,7 +22,7 @@ public abstract class ClientBase(TcpClient socket, PacketDispatcher dispatcher) 
     public abstract Task OnConnect();
 
     public void Connect() {
-        Logger.Logger.Info().Cid("Server").Log($"Client connected!");
+        Logger.Core.Logger.Info().Cid("Server").Log($"Client connected!");
         Init();
 
         StartBackgroundWorkers();
@@ -37,13 +37,13 @@ public abstract class ClientBase(TcpClient socket, PacketDispatcher dispatcher) 
             Init();
         }
         catch (Exception ex) {
-            Logger.Logger.Error().Log($"Connection unexpected error: {ex}");
+            Logger.Core.Logger.Error().Log($"Connection unexpected error: {ex}");
             throw new Exception($"Connection unexpected error: {ex}");
         }   
 
         await OnConnect();
 
-        Logger.Logger.Info().Cid("Client").Log($"Client connected to {host}:{port}");
+        Logger.Core.Logger.Info().Cid("Client").Log($"Client connected to {host}:{port}");
 
         StartBackgroundWorkers();
     }
@@ -59,7 +59,7 @@ public abstract class ClientBase(TcpClient socket, PacketDispatcher dispatcher) 
             _socket?.Disconnect();
         }
         catch (Exception ex) {
-            Logger.Logger.Error().Log($"Disconnect unexpected error: {ex}");
+            Logger.Core.Logger.Error().Log($"Disconnect unexpected error: {ex}");
             throw new Exception($"Disconnect unexpected error: {ex}");
         }
 
@@ -83,7 +83,7 @@ public abstract class ClientBase(TcpClient socket, PacketDispatcher dispatcher) 
                 break;
             }
             catch (Exception ex) {
-                Logger.Logger.Error().Cid("TimeOutCheckAsync").Log($"failed: {ex}");
+                Logger.Core.Logger.Error().Cid("TimeOutCheckAsync").Log($"failed: {ex}");
                 break;
             }
         }
@@ -100,10 +100,10 @@ public abstract class ClientBase(TcpClient socket, PacketDispatcher dispatcher) 
             }
         }
         catch (IOException ioEx) {
-            Logger.Logger.Warn().Cid("HandshakeAsync").Log($"Connection lost: {ioEx.Message}");
+            Logger.Core.Logger.Warn().Cid("HandshakeAsync").Log($"Connection lost: {ioEx.Message}");
         }
         catch (Exception ex) {
-            Logger.Logger.Error().Cid("HandshakeAsync").Log($"Unexpected error: {ex.Message}");
+            Logger.Core.Logger.Error().Cid("HandshakeAsync").Log($"Unexpected error: {ex.Message}");
         }
         finally {
             Disconnect(); // Only one disconnect call here

@@ -18,7 +18,7 @@ public static class Network {
                 return ip.ToString();
             }
         }
-        Logger.Logger.Warn().Log("No network adapters with an IPv4 address found.");
+        Logger.Core.Logger.Warn().Log("No network adapters with an IPv4 address found.");
         throw new Exception("No network adapters with an IPv4 address found.");
     }
 }

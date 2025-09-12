@@ -1,5 +1,4 @@
 ﻿using Net4;
-using Net4.Logger;
 using System;
 using System.Threading.Tasks;
 using System.Windows;
@@ -19,7 +18,7 @@ class Program {
             Environment.Exit(0);
         };
         while (true) {
-            Logger.Info().Log("Server is running - Ctr + C to exit");
+            Logger.Core.Logger.Info().Log("Server is running - Ctr + C to exit");
             await Task.Delay(60000);
         }
     }

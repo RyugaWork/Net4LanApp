@@ -31,7 +31,7 @@ public class TcpSocket(TcpClient socket) : IDisposable {
             _writer = new StreamWriter(Tcpstream, utf8NoBom) { AutoFlush = true };
         }
         catch (Exception ex) {
-            Logger.Logger.Error().Log($"NetworkStream init error: {ex}");
+            Logger.Core.Logger.Error().Log($"NetworkStream init error: {ex}");
             throw new InvalidOperationException($"Failed to initialize network stream: {ex.Message}", ex);
         }
     }
@@ -50,34 +50,34 @@ public class TcpSocket(TcpClient socket) : IDisposable {
     /// </summary>
     public async Task SendAsync(Packet packet) {
         if (Tcpstream == null) {
-            Logger.Logger.Warn().Log("NetworkStream is not initiated");
+            Logger.Core.Logger.Warn().Log("NetworkStream is not initiated");
             throw new Exception("NetworkStream is not initiated");
         }
 
         var json = packet.Serialize();
 
         try {
-            Logger.Logger.Info().Cid("Send").Log($"{packet}");
+            Logger.Core.Logger.Info().Cid("Send").Log($"{packet}");
             await _writer!.WriteLineAsync(json).ConfigureAwait(false);
         }
         catch (IOException ioEx) { // Signal disconnect
             // This happens when the connection is closed/reset
-            Logger.Logger.Warn().Log($"NetworkStream connection closed: {ioEx}");
+            Logger.Core.Logger.Warn().Log($"NetworkStream connection closed: {ioEx}");
             throw;
         }
         catch (SocketException sockEx) { // Signal disconnect
-            Logger.Logger.Warn().Log($"NetworkStream socket error: {sockEx}");
+            Logger.Core.Logger.Warn().Log($"NetworkStream socket error: {sockEx}");
             throw;
         }
         catch (Exception ex) {
-            Logger.Logger.Error().Log($"NetworkStream unexpected error: {ex}");
+            Logger.Core.Logger.Error().Log($"NetworkStream unexpected error: {ex}");
             throw;
         }
     }
 
     public async Task<Packet?> RecvAsync() {
         if (Tcpstream == null) {
-            Logger.Logger.Warn().Log("NetworkStream is not initiated");
+            Logger.Core.Logger.Warn().Log("NetworkStream is not initiated");
             throw new InvalidOperationException("NetworkStream is not initialized. Call InitNetworkStream first.");
         }
 
@@ -88,20 +88,20 @@ public class TcpSocket(TcpClient socket) : IDisposable {
 
             var packet = Packet.Deserialize(line);
             if (packet != null)
-                Logger.Logger.Info().Cid("Recv").Log($"{packet.Serialize()}");
+                Logger.Core.Logger.Info().Cid("Recv").Log($"{packet.Serialize()}");
             return packet;
         }
         catch (IOException ioEx) { // Signal disconnect
             // This happens when the connection is closed/reset
-            Logger.Logger.Warn().Log($"NetworkStream connection closed: {ioEx}");
+            Logger.Core.Logger.Warn().Log($"NetworkStream connection closed: {ioEx}");
             throw;
         }
         catch (SocketException sockEx) { // Signal disconnect
-            Logger.Logger.Warn().Log($"NetworkStream socket error: {sockEx}");
+            Logger.Core.Logger.Warn().Log($"NetworkStream socket error: {sockEx}");
             throw;
         }
         catch (Exception ex) {
-            Logger.Logger.Error().Log($"NetworkStream unexpected error: {ex}");
+            Logger.Core.Logger.Error().Log($"NetworkStream unexpected error: {ex}");
             throw;
         }
     }
@@ -118,7 +118,7 @@ public class TcpSocket(TcpClient socket) : IDisposable {
                     }
                     catch (Exception ex) {
                         /* ignore shutdown errors */
-                        Logger.Logger.Warn().Log($"Shutdown unexpected error: {ex}");
+                        Logger.Core.Logger.Warn().Log($"Shutdown unexpected error: {ex}");
                     }
                 }
 
@@ -134,11 +134,11 @@ public class TcpSocket(TcpClient socket) : IDisposable {
             Tcpstream = null;
         }
         catch (Exception ex) {
-            Logger.Logger.Error().Log($"Disconnect unexpected error: {ex}");
+            Logger.Core.Logger.Error().Log($"Disconnect unexpected error: {ex}");
             throw new Exception($"Disconnect unexpected error: {ex}");
         }
 
-        Logger.Logger.Info().Cid("TcpSocket").Log($"Disconnected");
+        Logger.Core.Logger.Info().Cid("TcpSocket").Log($"Disconnected");
     }
 
     private bool disposed = false; // to detect redundant calls

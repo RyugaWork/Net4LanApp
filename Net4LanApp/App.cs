@@ -1,5 +1,4 @@
-﻿using Net4.Logger;
-using Net4;
+﻿using Net4;
 using System;
 using System.Net.Sockets;
 using System.Threading.Tasks;
@@ -13,12 +12,12 @@ class Program {
     static async Task Main(string[] args) {
         var client = new Client(new TcpClient());
 
-        Logger.Trace().Cid("Trace").Log("");
-        Logger.Critical().Cid("Critical").Log("");
-        Logger.Debug().Cid("Debug").Log("");
-        Logger.Error().Cid("Error").Log("");
-        Logger.Warn().Cid("Warn").Log("");
-        Logger.Info().Cid("Info").Log("");
+        Logger.Core.Logger.Trace().Cid("Trace").Log("");
+        Logger.Core.Logger.Critical().Cid("Critical").Log("");
+        Logger.Core.Logger.Debug().Cid("Debug").Log("");
+        Logger.Core.Logger.Error().Cid("Error").Log("");
+        Logger.Core.Logger.Warn().Cid("Warn").Log("");
+        Logger.Core.Logger.Info().Cid("Info").Log("");
 
         await client.ConnectAsync(Network.LocalIPAddress, 5000);
 
@@ -27,7 +26,7 @@ class Program {
             Environment.Exit(0);
         };
         while (true) {
-            Logger.Info().Log("Client is running - Ctr + C to exit");
+            Logger.Core.Logger.Info().Log("Client is running - Ctr + C to exit");
             await Task.Delay(60000);
         }
     }
